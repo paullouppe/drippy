@@ -5,6 +5,7 @@ from pydantic import BaseModel, ValidationError
 from typing import Literal
 import re
 from tqdm import tqdm
+import os
 
 '''
 Steps :
@@ -23,11 +24,14 @@ OUTFITS_DATA_AUGMENTATION_PROMPT = 'Evaluate this image, your message NEEDING to
 "weatherSuitability": \'Cold\'//\'Neutral\'//\'Warm\', \n\
 }'
 
-CLOTHES_DATA_AUGMENTATION_PROMPT = 'Evaluate this image, your message NEEDING to follow the following JSON format :\n\
-{\n\
-"caption": [YOUR CAPTION], \n\
-"color": \'blue\'//\'cyan\'//\green\'//\black\'//\yellow\'//\red\'//\magenta\'//\white\', \n\
-}'
+CLOTHES_DATA_AUGMENTATION_PROMPT = '''Evaluate this image. Your message MUST follow the JSON format below:
+
+{
+  "caption": [YOUR CAPTION AS STRING],
+  "baseColour": "[One of: 'Navy Blue', 'Blue', 'Silver', 'Black', 'Grey', 'Green', 'Purple', 'White', 'Beige', 'Brown', 'Bronze', 'Teal', 'Copper', 'Pink', 'Off White', 'Maroon', 'Red', 'Khaki', 'Orange', 'Coffee Brown', 'Yellow', 'Charcoal', 'Gold', 'Steel', 'Tan', 'Multi', 'Magenta', 'Lavender', 'Sea Green', 'Cream', 'Peach', 'Olive', 'Skin', 'Burgundy', 'Grey Melange', 'Rust', 'Rose', 'Lime Green', 'Mauve', 'Turquoise Blue', 'Metallic', 'Mustard', 'Taupe', 'Nude', 'Mushroom Brown', 'Fluorescent Green']",
+  "category": "[One of: 'Topwear', 'Bottomwear', 'Watches', 'Socks', 'Shoes', 'Belts', 'Flip Flops', 'Bags', 'Innerwear', 'Sandal', 'Shoe Accessories', 'Fragrance', 'Jewellery', 'Lips', 'Saree', 'Eyewear', 'Nails', 'Scarves', 'Dress', 'Loungewear and Nightwear', 'Wallets', 'Apparel Set', 'Headwear', 'Mufflers', 'Skin Care', 'Makeup', 'Free Gifts', 'Ties', 'Accessories', 'Skin', 'Beauty Accessories', 'Water Bottle', 'Eyes', 'Bath and Body', 'Gloves', 'Sports Accessories', 'Cufflinks', 'Sports Equipment', 'Stoles', 'Hair', 'Perfumes', 'Home Furnishing', 'Umbrellas', 'Wristbands', 'Vouchers']",
+  "usage": "[One of: 'Casual', 'Formal', 'Sports', 'Smart Casual', 'Travel', 'Party', 'Home']"
+}'''
 
 
 DATA_AUGMENTATION_MODEL = 'llava'
@@ -54,7 +58,27 @@ class OutfitCaption(BaseModel):
 
 class ClothesCaption(BaseModel):
     caption: str
-    color: Literal['blue', 'cyan', 'green', 'black', 'yellow', 'red', 'magenta', 'white']    
+    baseColour: Literal['Navy Blue', 'Blue', 'Silver', 'Black', 'Grey', 'Green', 'Purple',
+       'White', 'Beige', 'Brown', 'Bronze', 'Teal', 'Copper', 'Pink',
+       'Off White', 'Maroon', 'Red', 'Khaki', 'Orange', 'Coffee Brown',
+       'Yellow', 'Charcoal', 'Gold', 'Steel', 'Tan', 'Multi', 'Magenta',
+       'Lavender', 'Sea Green', 'Cream', 'Peach', 'Olive', 'Skin',
+       'Burgundy', 'Grey Melange', 'Rust', 'Rose', 'Lime Green', 'Mauve',
+       'Turquoise Blue', 'Metallic', 'Mustard', 'Taupe', 'Nude',
+       'Mushroom Brown', 'Fluorescent Green']
+    category: Literal['Topwear', 'Bottomwear', 'Watches', 'Socks', 'Shoes', 'Belts',
+       'Flip Flops', 'Bags', 'Innerwear', 'Sandal', 'Shoe Accessories',
+       'Fragrance', 'Jewellery', 'Lips', 'Saree', 'Eyewear', 'Nails',
+       'Scarves', 'Dress', 'Loungewear and Nightwear', 'Wallets',
+       'Apparel Set', 'Headwear', 'Mufflers', 'Skin Care', 'Makeup',
+       'Free Gifts', 'Ties', 'Accessories', 'Skin', 'Beauty Accessories',
+       'Water Bottle', 'Eyes', 'Bath and Body', 'Gloves',
+       'Sports Accessories', 'Cufflinks', 'Sports Equipment', 'Stoles',
+       'Hair', 'Perfumes', 'Home Furnishing', 'Umbrellas', 'Wristbands',
+       'Vouchers']
+    usage: Literal['Casual', 'Formal', 'Sports', 'Smart Casual',
+       'Travel', 'Party', 'Home']
+    
 
 def call_model(model: str, system_prompt: str, prompt: str, image_path: str):
     response = ollama.chat(
@@ -76,7 +100,7 @@ def call_model(model: str, system_prompt: str, prompt: str, image_path: str):
 
 def load_outfits():
     df_metadata = pd.read_csv(DATASET_OUTFITS_PATH)
-    return df_metadata[df_metadata["label_type"] == 'image-level'].head(3)
+    return df_metadata[df_metadata["label_type"] == 'image-level'].head(1)
 
 def load_class_dict():
     return pd.read_csv(DATASET_OUTFITS_CLASS_DICT_PATH)
@@ -95,11 +119,11 @@ def outfits_data_augmentation(image_path: str):
 
     raise ValidationError
 
-def clothes_data_augmentation(image_path: str):
+def clothes_data_augmentation(image_path: str, prompt: str):
 
     for i in range(RETRY_LIMIT):
 
-        response = call_model(DATA_AUGMENTATION_MODEL, CLOTHES_DATA_AUGMENTATION_PROMPT, "", image_path)
+        response = call_model(DATA_AUGMENTATION_MODEL, CLOTHES_DATA_AUGMENTATION_PROMPT, prompt, image_path)
 
         try:
             return ClothesCaption.model_validate_json(extract_json(response))
@@ -112,40 +136,85 @@ def clothes_data_augmentation(image_path: str):
 def data_integration_pipeline():
 
     outfits = load_outfits()
-    outfits_class_dict = load_class_dict()  # Make an augmented row too?
+    outfits_class_dict = load_class_dict()
 
-    idx_to_drop = []
+    # ----- dataset outfit augmentation -----
+    if not os.path.isfile("checkpoints/outfits_first_augmentation.pkl"): 
+        idx_to_drop = []
 
-    # dataset outfit augmentation
-    for idx, row in tqdm(outfits.iterrows()):
+        for idx, row in tqdm(outfits.iterrows()):
+            try:
+                outfit_caption = outfits_data_augmentation(f'data/clothing-coparsing-dataset/{row["image_path"]}')
+                outfits.at[idx, 'caption'] = outfit_caption.caption
+                outfits.at[idx, 'type'] = outfit_caption.type
 
-        try:
+                print(f"Succesfully augmented row {idx}")
 
-            outfit_caption = outfits_data_augmentation(f'data/clothing-coparsing-dataset/{row["image_path"]}')
-            outfits.at[idx, 'caption'] = outfit_caption.caption
-            outfits.at[idx, 'type'] = outfit_caption.type
+            except ValidationError:
+                print(f"Validation failed after {RETRY_LIMIT} tries. Skipping row {idx}.")
+                idx_to_drop.append(idx)
+                continue
 
-            print(f"Succesfully augmented row {idx}")
-
-        except ValidationError:
-            print(f"Validation failed after {RETRY_LIMIT} tries. Skipping row {idx}.")
-            idx_to_drop.append(idx)
-            continue
-
-    outfits = outfits.drop(idx_to_drop)
-
-    # df_clothes_from_outfits = []
-
-    # for index, row in outfits.iterrows():
-    #     pass
+        outfits = outfits.drop(idx_to_drop)
+        outfits.to_pickle("checkpoints/outfits_first_augmentation.pkl")
+    else:
+        outfits = pd.read_pickle("checkpoints/outfits_first_augmentation.pkl")
         
-    # oskour
-    # for h in outfits.habits:
-    #     outfits['clothes'] = [id des clothes]
-    #     df_clothes_from_outfits.append("", "", "", "")
 
+    # ----- converting outfit clothes to the clothes dataset -----
+    df_clothes_from_outfits = pd.DataFrame(columns=['class_name', 'outfit_id', 'image_path'])
 
-    # clothes_data_augmentation()
+    outfits['clothes'] = None
+
+    for index, row in outfits.iterrows():
+        lab_path = f"data/clothing-coparsing-dataset/labels/{row['label_path']}"
+        lab_file = open(lab_path, 'r')
+        clothes_names = [outfits_class_dict["class_name"][int(line)] for line in lab_file.readlines() if int(line) != 0]
+
+        clothes_id = []
+        for cn in clothes_names:
+            id_clothes = len(df_clothes_from_outfits)
+            clothes_id.append(id_clothes)
+            df_clothes_from_outfits.loc[id_clothes] = [cn, index, row['image_path']]
+        
+        outfits.at[index, 'clothes'] = clothes_id
+
+    # ----- extract clothes image from outfit -----
+    # here with a deeplearning model trained to identify clothes 
+    # we could extract and crop the clothes into new images that could be processed 
+    # more easily by the multimodal data augmentation LLM
+
+    # ----- dataset outfit augmentation -----
+    if not os.path.isfile("checkpoints/clothes_second_augmentation.pkl"):
+        idx_to_drop = []
+
+        df_clothes_from_outfits['caption'] = None
+        df_clothes_from_outfits['baseColour'] = None
+        df_clothes_from_outfits['category'] = None
+        df_clothes_from_outfits['usage'] = None
+
+        for idx, row in tqdm(df_clothes_from_outfits.iterrows()):
+            try:
+                clothes_caption = clothes_data_augmentation(
+                    f'data/clothing-coparsing-dataset/{row["image_path"]}', 
+                    f'Focus on the tags for this piece of clothing : {row.class_name}'
+                )
+                df_clothes_from_outfits.at[idx, 'caption'] = clothes_caption.caption
+                df_clothes_from_outfits.at[idx, 'baseColour'] = clothes_caption.baseColour
+                df_clothes_from_outfits.at[idx, 'category'] = clothes_caption.category
+                df_clothes_from_outfits.at[idx, 'usage'] = clothes_caption.usage
+
+                print(f"Succesfully augmented row {idx}")
+
+            except ValidationError:
+                print(f"Validation failed after {RETRY_LIMIT} tries. Skipping row {idx}.")
+                idx_to_drop.append(idx)
+                continue
+
+        df_clothes_from_outfits = df_clothes_from_outfits.drop(idx_to_drop)
+        outfits.to_pickle("checkpoints/clothes_second_augmentation.pkl")
+    else:
+        df_clothes_from_outfits = pd.read_pickle("checkpoints/clothes_second_augmentation.pkl")
     return
 
 data_integration_pipeline()
