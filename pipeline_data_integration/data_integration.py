@@ -38,7 +38,7 @@ DATA_AUGMENTATION_MODEL = 'llava'
 DATASET_OUTFITS_PATH = 'data/clothing-coparsing-dataset/metadata.csv'
 DATASET_OUTFITS_CLASS_DICT_PATH = 'data/clothing-coparsing-dataset/class_dict.csv'
 
-RETRY_LIMIT = 3
+RETRY_LIMIT = 1
 
 def extract_json(text):
 
@@ -78,7 +78,6 @@ class ClothesCaption(BaseModel):
        'Vouchers']
     usage: Literal['Casual', 'Formal', 'Sports', 'Smart Casual',
        'Travel', 'Party', 'Home']
-    
 
 def call_model(model: str, system_prompt: str, prompt: str, image_path: str):
     response = ollama.chat(
@@ -100,7 +99,7 @@ def call_model(model: str, system_prompt: str, prompt: str, image_path: str):
 
 def load_outfits():
     df_metadata = pd.read_csv(DATASET_OUTFITS_PATH)
-    return df_metadata[df_metadata["label_type"] == 'image-level'].head(1)
+    return df_metadata[df_metadata["label_type"] == 'image-level']
 
 def load_class_dict():
     return pd.read_csv(DATASET_OUTFITS_CLASS_DICT_PATH)
@@ -113,11 +112,12 @@ def outfits_data_augmentation(image_path: str):
 
         try:
             return OutfitCaption.model_validate_json(extract_json(response))
-        except ValidationError:
+        except ValidationError as e:
             print(f"Validation ({i+1}/{RETRY_LIMIT} failed. Retrying...)")
+            last_error = e
             pass
 
-    raise ValidationError
+    raise last_error
 
 def clothes_data_augmentation(image_path: str, prompt: str):
 
@@ -127,11 +127,12 @@ def clothes_data_augmentation(image_path: str, prompt: str):
 
         try:
             return ClothesCaption.model_validate_json(extract_json(response))
-        except ValidationError:
+        except ValidationError as e:
             print(f"Validation ({i+1}/{RETRY_LIMIT} failed. Retrying...)")
+            last_error = e
             pass
 
-    raise ValidationError
+    raise last_error
 
 def data_integration_pipeline():
 
@@ -186,8 +187,6 @@ def data_integration_pipeline():
 
     # ----- dataset outfit augmentation -----
     if not os.path.isfile("checkpoints/clothes_second_augmentation.pkl"):
-        idx_to_drop = []
-
         df_clothes_from_outfits['caption'] = None
         df_clothes_from_outfits['baseColour'] = None
         df_clothes_from_outfits['category'] = None
@@ -208,13 +207,14 @@ def data_integration_pipeline():
 
             except ValidationError:
                 print(f"Validation failed after {RETRY_LIMIT} tries. Skipping row {idx}.")
-                idx_to_drop.append(idx)
                 continue
 
-        df_clothes_from_outfits = df_clothes_from_outfits.drop(idx_to_drop)
         outfits.to_pickle("checkpoints/clothes_second_augmentation.pkl")
     else:
         df_clothes_from_outfits = pd.read_pickle("checkpoints/clothes_second_augmentation.pkl")
+
+    print(outfits)
+    print(df_clothes_from_outfits)
     return
 
 data_integration_pipeline()
