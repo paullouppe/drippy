@@ -1,0 +1,7 @@
+pandas
+ollama
+torch
+transformers
+Pillow
+scipy
+matplotlib
