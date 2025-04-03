@@ -209,7 +209,7 @@ def data_integration_pipeline():
                 print(f"Validation failed after {RETRY_LIMIT} tries. Skipping row {idx}.")
                 continue
 
-        outfits.to_pickle("checkpoints/clothes_second_augmentation.pkl")
+        df_clothes_from_outfits.to_pickle("checkpoints/clothes_second_augmentation.pkl")
     else:
         df_clothes_from_outfits = pd.read_pickle("checkpoints/clothes_second_augmentation.pkl")
 
