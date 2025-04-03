@@ -67,7 +67,7 @@ def run_recommendation_pipeline(df: pd.DataFrame, reco_algo, users_liked: list, 
 def try_from_pickle(path: str, reco_algo, one_hot = False, extra_ra_args = {}):
 
     rd = random.Random()
-
+    print(extra_ra_args)
     # Get the pickled data and one-hot encode it
     clothes = pd.DataFrame(pd.read_pickle(path))
     clothes.dropna(inplace=True)

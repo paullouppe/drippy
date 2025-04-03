@@ -60,7 +60,7 @@ def load_RAG(dataset_path, embedding_path, user_clothes_dataset_path, user_cloth
 
     # Load or create embeddings
     embedding = load_embeddings(embedding_path)
-    user_clothes_embedding = load_embeddings(user_clothes_embedding)
+    user_clothes_embedding = load_embeddings(user_clothes_embedding_path)
     return df, embedding, user_clothes_df, user_clothes_embedding
 
 from pprint import pprint
@@ -95,7 +95,7 @@ def call_RAG(query, outfit_clothes_embedding, user_clothes_embedding, clothes_df
             {
                 "role": "system",
                 "content": SYSTEM_PROMPT(query, "\n".join([
-                    f"Type of clothes: {chunk['class_name']} Caption: {chunk['caption']} Color: {chunk['baseColour']} Category: {chunk['category']} Usage: {chunk['usage']}"
+                    f"Type: {chunk['articleType']} Color: {chunk['baseColour']} Gender: {chunk['gender']} Category: {chunk['masterCategory']} Display name: {chunk['productDisplayName']} Subcategory: {chunk['subCategory']} Usage: {chunk['usage']}"
                     for sublist in most_similar_user_clothes
                     for score, chunk in sublist
                 ]))
@@ -106,4 +106,4 @@ def call_RAG(query, outfit_clothes_embedding, user_clothes_embedding, clothes_df
     print("\n\n")
     print(response["message"]["content"])
 
-    return most_similar_chunks, response["message"]["content"]
+    return most_similar_user_clothes, response["message"]["content"]
