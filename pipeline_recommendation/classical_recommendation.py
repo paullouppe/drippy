@@ -64,7 +64,7 @@ def run_recommendation_pipeline(df: pd.DataFrame, reco_algo, users_liked: list, 
 
     return similarities
 
-def try_from_pickle(path: str, reco_algo, extra_ra_args = {}):
+def try_from_pickle(path: str, reco_algo, one_hot = False, extra_ra_args = {}):
 
     rd = random.Random()
 
@@ -73,7 +73,9 @@ def try_from_pickle(path: str, reco_algo, extra_ra_args = {}):
     clothes.dropna(inplace=True)
     clothes.reset_index(drop=True, inplace=True)
     clothes.drop(['class_name', 'outfit_id', 'image_path', 'caption'], axis = 1, inplace=True)
-    clothes = pd.get_dummies(clothes, dtype=int) # Si on utilise une méthode embeddé, on pourrait préférer ne pas faire de one-hot encoding
+
+    if one_hot:
+        clothes = pd.get_dummies(clothes, dtype=int)
 
     # Generate random user
     users = [rd.sample(range(len(clothes)), 50)]
