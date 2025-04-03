@@ -4,15 +4,13 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 
-EMBEDDING_PATH = "checkpoints/embedding_clothes.npy"
-DATASET_PATH = "checkpoints/clothes_second_augmentation.pkl"
 SYSTEM_PROMPT = """You are a helpful reading assistant who answers questions 
         based on snippets of text provided in context. Answer only using the context provided, 
         being as concise as possible. If you're unsure, just say that you don't know.
         Context:
     """
 
-def retriever(query, bdd, df, model, top_k=1):
+def retriever(query, bdd, df, model, top_k=20):
     try:
         processed_query = ' '.join(map(str, [query]))
         query_embedding = ollama.embeddings(model=model, prompt=processed_query)["embedding"]
@@ -45,18 +43,34 @@ def outfit_adaptation():
     pass
 
 
-def load_RAG():
+def load_RAG(dataset_path, embedding_path):
     # Load dataset
-    df = pd.read_pickle(DATASET_PATH)
+    df = pd.read_pickle(dataset_path)
 
     # Load or create embeddings
-    embedding = load_embeddings(EMBEDDING_PATH)
+    embedding = load_embeddings(embedding_path)
     return df, embedding
 
 def call_RAG(query, bdd, df, query_embedding_model_name='all-minilm', conversationnal_model_name='qwen2.5'):
     most_similar_chunks = retriever(query, bdd, df, query_embedding_model_name)
 
     print("Retrieved:", most_similar_chunks)
+
+    pondered_outfits = {}
+
+    for (score, cloth) in most_similar_chunks:
+        if pondered_outfits.get(cloth["outfit_id"]):
+            pondered_outfits[cloth["outfit_id"]] += score
+        else:
+            pondered_outfits[cloth["outfit_id"]] = score
+        
+    selected_outfit = max(pondered_outfits, key=pondered_outfits.get)
+    print(selected_outfit)
+
+
+    # 
+
+    # adaptation ici
 
     # response = ollama.chat(
     #     model=conversationnal_model_name,
@@ -73,9 +87,3 @@ def call_RAG(query, bdd, df, query_embedding_model_name='all-minilm', conversati
     # print(response["message"]["content"])
 
     # return most_similar_chunks, response["message"]["content"]
-
-
-question = "Outfit with a grey shirt"
-df, bdd = load_RAG()
-# ms_chunks, response = call_RAG(question, bdd, df, 'all-minilm')
-call_RAG(question, bdd, df, 'all-minilm')
