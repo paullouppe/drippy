@@ -1,11 +1,12 @@
-import pandas as pd
+import os
+import re
 import json
 import ollama
-from pydantic import BaseModel, ValidationError
-from typing import Literal
-import re
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
-import os
+from typing import Literal
+from pydantic import BaseModel, ValidationError
 
 '''
 Steps :
@@ -37,6 +38,8 @@ CLOTHES_DATA_AUGMENTATION_PROMPT = '''Evaluate this image. Your message MUST fol
 DATA_AUGMENTATION_MODEL = 'llava'
 DATASET_OUTFITS_PATH = 'data/clothing-coparsing-dataset/metadata.csv'
 DATASET_OUTFITS_CLASS_DICT_PATH = 'data/clothing-coparsing-dataset/class_dict.csv'
+EMBEDDING_PATH='checkpoints/embedding_clothes.npy'
+
 
 RETRY_LIMIT = 1
 
@@ -134,7 +137,44 @@ def clothes_data_augmentation(image_path: str, prompt: str):
 
     raise last_error
 
-def data_integration_pipeline():
+def embedding_of_dataframe(dataset, embedding_path, embedding_model_name):
+    if os.path.exists(embedding_path):
+        print(f"Loading embeddings from {embedding_path}...")
+        embedding = np.load(embedding_path, allow_pickle=True)
+    else:
+        print(f"Embeddings not found at {embedding_path}, creating new ones...")
+        embedding = build_embeddings_bdd(
+            dataset=dataset,
+            model=lambda prompt: ollama_embedding_model(prompt, model=embedding_model_name),
+            save_path=embedding_path
+        )
+    return embedding
+
+def build_embeddings_bdd(dataset, model, save_path=None):
+    embedding = []
+    try:
+        texts = dataset.apply(lambda row: ' '.join(map(str, row)), axis=1).tolist()
+        
+        for i, text in enumerate(tqdm(texts, desc="Building embeddings")):
+            try:
+                embeddings = model(prompt=text)["embedding"]
+                embedding.append(embeddings)
+            except Exception as e:
+                print(f"Error processing row {i + 1}: {e}")
+        
+        if save_path:
+            np.save(save_path, np.array(embedding))
+            print(f"Embeddings saved to {save_path}.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    return embedding
+
+
+# Function to generate embeddings with Ollama
+def ollama_embedding_model(prompt, model="your_model_name"):
+    return ollama.embeddings(model=model, prompt=prompt)
+
+def data_integration_pipeline(embedding_model_name='all-minilm'):
 
     outfits = load_outfits()
     outfits_class_dict = load_class_dict()
@@ -212,9 +252,4 @@ def data_integration_pipeline():
         df_clothes_from_outfits.to_pickle("checkpoints/clothes_second_augmentation.pkl")
     else:
         df_clothes_from_outfits = pd.read_pickle("checkpoints/clothes_second_augmentation.pkl")
-
-    print(outfits)
-    print(df_clothes_from_outfits)
     return
-
-data_integration_pipeline()
