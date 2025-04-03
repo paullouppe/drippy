@@ -78,7 +78,4 @@ def try_from_pickle(path: str, reco_algo, extra_ra_args = {}):
     # Generate random user
     users = [rd.sample(range(len(clothes)), 50)]
 
-    run_recommendation_pipeline(clothes, reco_algo, users, extra_ra_args)
-
-# try_from_pickle("checkpoints/clothes_second_augmentation.pkl", tfidf)
-try_from_pickle("checkpoints/clothes_second_augmentation.pkl", embeded_similarity, {"model": "all-minilm"})
+    return run_recommendation_pipeline(clothes, reco_algo, users, extra_ra_args)
