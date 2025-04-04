@@ -1,2 +1,3 @@
 .venv
 data
+data/user_embedding_clothes_all-minilm.npy
